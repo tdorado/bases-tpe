@@ -18,3 +18,12 @@ CREATE TABLE departamento
     provincia int not null,
     foreign key (provincia) references provincia on delete restrict
 );
+
+CREATE TABLE  localidad
+(
+    id_localidad serial not null primary key,
+    nombre text not null,
+    departamento int not null,
+    canthab int,
+    foreign key (departamento) references departamento on delete restrict
+);
