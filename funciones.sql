@@ -4,6 +4,8 @@ drop table if exists localidad;
 drop table if exists departamento;
 drop table if exists provincia;
 drop table if exists pais;
+drop table if exists intermedia;
+
 CREATE TABLE pais
 (
     id_pais serial not null primary key,
@@ -37,7 +39,6 @@ CREATE TABLE  localidad
     foreign key (id_departamento) references departamento on delete restrict
 );
 
-drop table if exists intermedia;
 CREATE TABLE intermedia
 (
     nombre text not null,
@@ -51,14 +52,19 @@ create or replace function doInsertarEnOtrasTablas()
 returns trigger as
     $$
     begin
-        if not exists(select * from pais where pais like new.pais) then
+        if not exists(select * from pais where pais = new.pais) then
             insert into pais (pais) values (new.pais);
         end if;
-        if not exists(select * from provincia where provincia = new.provincia) then
-            insert into provincia (provincia, id_pais) values (new.provincia, (select id_pais from pais where pais like new.pais));
+        if not exists(select * from provincia where provincia = new.provincia
+                                                and id_pais = (select id_pais from pais
+                                                                where pais.pais = new.pais)) then
+            insert into provincia (provincia, id_pais) values (new.provincia, (select id_pais from pais where pais = new.pais));
         end if;
-        if not exists(select * from departamento where departamento like new.departamento
-                                                    and departamento.provincia = new.provincia) then
+        if not exists(select * from departamento where departamento = new.departamento
+                                                    and departamento.provincia = (select provincia from provincia
+                                                                                                            where provincia.provincia=new.provincia
+                                                                                                  and provincia.id_pais = (select id_pais from pais
+                                                                                                                            where pais.pais = new.pais))) then
             insert into departamento (departamento, provincia) values (new.departamento, (select provincia from provincia where provincia = new.provincia));
         end if;
         update localidad
@@ -92,3 +98,47 @@ create trigger insertarEnOtrasTablas
 \copy intermedia from localidades.csv header delimiter ',' csv;
 
 -- Ejercicio 2
+
+create or replace function doDeleteEnOtrasTablas()
+returns trigger as
+    $$
+    begin
+        DELETE FROM localidad WHERE nombre = old.nombre  and id_departamento = (select departamento.id_departamento from departamento 
+                                    where departamento.departamento = old.departamento and departamento.provincia = (select provincia from provincia
+                                                                                                        where provincia.provincia = old.provincia
+                                                                                                        and provincia.id_pais = (select id_pais from pais
+                                                                                                                                where pais.pais = old.pais)));
+        if not exists(select * from localidad where id_departamento = (select departamento.id_departamento from departamento 
+                                    where departamento.departamento = old.departamento and departamento.provincia = (select provincia from provincia
+                                                                                                        where provincia.provincia = old.provincia
+                                                                                                        and provincia.id_pais = (select id_pais from pais
+                                                                                                                                where pais.pais = old.pais)))) then
+            DELETE FROM departamento WHERE id_departamento = (select departamento.id_departamento from departamento 
+                                    where departamento.departamento = old.departamento and departamento.provincia = (select provincia from provincia
+                                                                                                        where provincia.provincia = old.provincia
+                                                                                                        and provincia.id_pais = (select id_pais from pais
+                                                                                                                                where pais.pais = old.pais)));
+        end if;
+        if not exists(select * from departamento where provincia = (select provincia from provincia
+                                                                    where provincia.provincia = old.provincia
+                                                                    and provincia.id_pais = (select id_pais from pais
+                                                                                            where pais.pais = old.pais))) then
+            DELETE FROM provincia WHERE provincia = (select provincia from provincia
+                                                                    where provincia.provincia = old.provincia
+                                                                    and provincia.id_pais = (select id_pais from pais
+                                                                                            where pais.pais = old.pais));
+        end if;
+        if not exists(select * from provincia where id_pais = (select id_pais from pais
+                                                                where pais.pais = old.pais)) then
+            DELETE FROM pais WHERE id_pais = (select id_pais from pais
+                                                                where pais.pais = old.pais);
+        end if;
+        return null;
+    end
+    $$
+LANGUAGE plpgsql;
+
+create trigger deleteEnOtrasTablas
+    after delete on intermedia
+    for each row
+    execute procedure doDeleteEnOtrasTablas();
