@@ -146,7 +146,6 @@ returns TRIGGER AS
         DELETE
         FROM   localidad
         WHERE  nombre = old.nombre
-        AND    canthab = old.canthab
         AND    id_departamento = (SELECT departamento.id_departamento
                                   FROM   departamento
                                   WHERE  departamento.departamento = old.departamento
