@@ -1,3 +1,5 @@
+-- Ejercicio 1
+
 drop table if exists localidad;
 drop table if exists departamento;
 drop table if exists provincia;
@@ -49,13 +51,14 @@ create or replace function doInsertarEnOtrasTablas()
 returns trigger as
     $$
     begin
-        if not exists(select * from pais where pais = new.pais) then
+        if not exists(select * from pais where pais like new.pais) then
             insert into pais (pais) values (new.pais);
         end if;
         if not exists(select * from provincia where provincia = new.provincia) then
-            insert into provincia (provincia, id_pais) values (new.provincia, (select id_pais from pais where pais = new.pais));
+            insert into provincia (provincia, id_pais) values (new.provincia, (select id_pais from pais where pais like new.pais));
         end if;
-        if not exists(select * from departamento where departamento = new.departamento) then
+        if not exists(select * from departamento where departamento like new.departamento
+                                                    and departamento.provincia = new.provincia) then
             insert into departamento (departamento, provincia) values (new.departamento, (select provincia from provincia where provincia = new.provincia));
         end if;
         update localidad
@@ -88,4 +91,4 @@ create trigger insertarEnOtrasTablas
 
 \copy intermedia from localidades.csv header delimiter ',' csv;
 
-select * from localidad
+-- Ejercicio 2
