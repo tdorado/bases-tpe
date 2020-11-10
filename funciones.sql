@@ -1,144 +1,253 @@
--- Ejercicio 1
 
-drop table if exists localidad;
-drop table if exists departamento;
-drop table if exists provincia;
-drop table if exists pais;
-drop table if exists intermedia;
+-- Ejercicio 1
+DROP TABLE IF EXISTS localidad;
+DROP TABLE IF EXISTS departamento;
+DROP TABLE IF EXISTS provincia;
+DROP TABLE IF EXISTS pais;
+DROP TABLE IF EXISTS intermedia;
 
 CREATE TABLE pais
 (
-    id_pais serial not null primary key,
-    pais text not null
+    id_pais SERIAL NOT NULL PRIMARY KEY,
+    pais TEXT NOT NULL
 );
-
 
 CREATE TABLE provincia
 (
-    provincia int not null primary key,
-    id_pais int not null,
-    foreign key (id_pais) references pais on delete restrict
+    provincia INT NOT NULL PRIMARY KEY,
+    id_pais   INT NOT NULL,
+    FOREIGN KEY (id_pais) REFERENCES pais ON DELETE RESTRICT
 );
-
 
 CREATE TABLE departamento
 (
-    id_departamento serial not null primary key,
-    departamento text not null,
-    provincia int not null,
-    foreign key (provincia) references provincia on delete restrict
+    id_departamento SERIAL NOT NULL PRIMARY KEY,
+    departamento TEXT NOT NULL,
+    provincia INT NOT NULL,
+    FOREIGN KEY (provincia) REFERENCES provincia ON DELETE RESTRICT
 );
 
-
-CREATE TABLE  localidad
+CREATE TABLE localidad
 (
-    id_localidad serial not null primary key,
-    nombre text not null,
-    id_departamento int not null,
-    canthab int,
-    foreign key (id_departamento) references departamento on delete restrict
+    id_localidad SERIAL NOT NULL PRIMARY KEY,
+    nombre TEXT NOT NULL,
+    id_departamento INT NOT NULL,
+    canthab         INT,
+    FOREIGN KEY (id_departamento) REFERENCES departamento ON DELETE RESTRICT
 );
 
 CREATE TABLE intermedia
 (
-    nombre text not null,
-    pais text not null,
-    provincia int not null,
-    departamento text not null,
-    canthab int
+    nombre TEXT NOT NULL,
+    pais TEXT NOT NULL,
+    provincia INT NOT NULL,
+    departamento TEXT NOT NULL,
+    canthab INT
 );
 
-create or replace function doInsertarEnOtrasTablas()
-returns trigger as
+CREATE OR replace FUNCTION doinsertarenotrastablas()
+returns TRIGGER AS
     $$
-    begin
-        if not exists(select * from pais where pais = new.pais) then
-            insert into pais (pais) values (new.pais);
-        end if;
-        if not exists(select * from provincia where provincia = new.provincia
-                                                and id_pais = (select id_pais from pais
-                                                                where pais.pais = new.pais)) then
-            insert into provincia (provincia, id_pais) values (new.provincia, (select id_pais from pais where pais = new.pais));
-        end if;
-        if not exists(select * from departamento where departamento = new.departamento
-                                                    and departamento.provincia = (select provincia from provincia
-                                                                                                            where provincia.provincia=new.provincia
-                                                                                                  and provincia.id_pais = (select id_pais from pais
-                                                                                                                            where pais.pais = new.pais))) then
-            insert into departamento (departamento, provincia) values (new.departamento, (select provincia from provincia where provincia = new.provincia));
-        end if;
-        update localidad
-            set canthab = new.canthab
-        where
-              nombre = new.nombre and
-              id_departamento = (select id_departamento from departamento 
-                                    where departamento = new.departamento and departamento.provincia = (select provincia from provincia
-                                                                                                            where provincia.provincia=new.provincia
-                                                                                                  and provincia.id_pais = (select id_pais from pais
-                                                                                                                            where pais.pais = new.pais)));
-        if not found then 
-            insert into localidad (nombre, id_departamento, canthab)
-            values (new.nombre, (select id_departamento from departamento 
-                                    where departamento = new.departamento and departamento.provincia = (select provincia from provincia
-                                                                                                            where provincia.provincia=new.provincia
-                                                                                                  and provincia.id_pais = (select id_pais from pais
-                                                                                                                            where pais.pais = new.pais))),new.canthab);
-            
-        end if;
-        return null;
-    end
-    $$
+    BEGIN 
+        -- Si no existe el pais lo agrego
+        IF NOT EXISTS (SELECT * FROM pais WHERE pais = new.pais) 
+        THEN
+            INSERT INTO pais(pais) 
+                   VALUES(new.pais);
+        END IF;
+
+        -- Si no existe provincia con pais buscando su id, lo agrego con ese id
+        IF NOT EXISTS (SELECT *
+                       FROM   provincia
+                       WHERE  provincia = new.provincia
+                       AND    id_pais = (SELECT id_pais
+                                         FROM   pais
+                                         WHERE  pais.pais = new.pais)
+                      )
+        THEN
+            INSERT  INTO provincia(provincia, id_pais)
+                    VALUES(new.provincia,
+                           (SELECT id_pais
+                            FROM   pais
+                            WHERE  pais = new.pais
+                           )
+                          );
+        END IF;
+
+        -- Si no existe el departamento con una provincia y pais buscando su respectivo id, lo agrego con esos ids
+        IF NOT EXISTS (SELECT *
+                       FROM   departamento
+                       WHERE  departamento = new.departamento
+                       AND    departamento.provincia = (SELECT provincia.provincia
+                                                        FROM   provincia
+                                                        WHERE  provincia.provincia = new.provincia
+                                                        AND    provincia.id_pais = (SELECT id_pais
+                                                                                    FROM   pais
+                                                                                    WHERE  pais.pais = new.pais)
+                                                       )
+                      )
+        THEN
+            INSERT INTO departamento(departamento, provincia)
+                   VALUES(new.departamento,
+                          (SELECT provincia.provincia
+                           FROM   provincia
+                           WHERE  provincia.provincia = new.provincia
+                           AND    provincia.id_pais = (SELECT id_pais
+                                                       FROM   pais
+                                                       WHERE  pais.pais = new.pais
+                                                      )
+                          )
+                         );
+        END IF;
+
+        -- Primero intentamos actualizar la cantidad de habitantes de la localidad con sus respectivos id de departamento, provincia y pais.
+        -- Si no existe se agrega la localidad
+        UPDATE localidad
+            SET    canthab = new.canthab
+            WHERE  nombre = new.nombre
+            AND    id_departamento =(SELECT id_departamento
+                                     FROM   departamento
+                                     WHERE  departamento = new.departamento
+                                     AND    departamento.provincia = (SELECT provincia.provincia
+                                                                      FROM   provincia
+                                                                      WHERE  provincia.provincia = new.provincia
+                                                                      AND    provincia.id_pais = (SELECT id_pais
+                                                                                                  FROM   pais
+                                                                                                  WHERE  pais.pais = new.pais)));
+            IF NOT found THEN
+                INSERT INTO localidad(nombre, id_departamento, canthab)
+                       VALUES(new.nombre,
+                              (SELECT id_departamento
+                               FROM   departamento
+                               WHERE  departamento = new.departamento
+                               AND    departamento.provincia = (SELECT provincia.provincia
+                                                                FROM   provincia
+                                                                WHERE  provincia.provincia = new.provincia
+                                                                AND    provincia.id_pais = (SELECT id_pais
+                                                                                            FROM   pais
+                                                                                            WHERE  pais.pais = new.pais)
+                                                               )
+                              ),
+                              new.canthab
+                              );
+        END IF;
+        RETURN NULL;
+    END
+    $$ 
 LANGUAGE plpgsql;
 
-create trigger insertarEnOtrasTablas
-    after insert on intermedia
-    for each row
-    execute procedure doInsertarEnOtrasTablas();
+CREATE TRIGGER insertarenotrastablas 
+    AFTER INSERT ON intermedia 
+    FOR each row
+    EXECUTE PROCEDURE doinsertarenotrastablas();
 
-\copy intermedia from localidades.csv header delimiter ',' csv;
+\copy intermedia FROM localidades.csv header delimiter ',' csv;
+
 
 -- Ejercicio 2
-
-create or replace function doDeleteEnOtrasTablas()
-returns trigger as
+CREATE OR replace FUNCTION dodeleteenotrastablas()
+returns TRIGGER AS
     $$
-    begin
-        DELETE FROM localidad WHERE nombre = old.nombre  and id_departamento = (select departamento.id_departamento from departamento 
-                                    where departamento.departamento = old.departamento and departamento.provincia = (select provincia from provincia
-                                                                                                        where provincia.provincia = old.provincia
-                                                                                                        and provincia.id_pais = (select id_pais from pais
-                                                                                                                                where pais.pais = old.pais)));
-        if not exists(select * from localidad where id_departamento = (select departamento.id_departamento from departamento 
-                                    where departamento.departamento = old.departamento and departamento.provincia = (select provincia from provincia
-                                                                                                        where provincia.provincia = old.provincia
-                                                                                                        and provincia.id_pais = (select id_pais from pais
-                                                                                                                                where pais.pais = old.pais)))) then
-            DELETE FROM departamento WHERE id_departamento = (select departamento.id_departamento from departamento 
-                                    where departamento.departamento = old.departamento and departamento.provincia = (select provincia from provincia
-                                                                                                        where provincia.provincia = old.provincia
-                                                                                                        and provincia.id_pais = (select id_pais from pais
-                                                                                                                                where pais.pais = old.pais)));
-        end if;
-        if not exists(select * from departamento where provincia = (select provincia from provincia
-                                                                    where provincia.provincia = old.provincia
-                                                                    and provincia.id_pais = (select id_pais from pais
-                                                                                            where pais.pais = old.pais))) then
-            DELETE FROM provincia WHERE provincia = (select provincia from provincia
-                                                                    where provincia.provincia = old.provincia
-                                                                    and provincia.id_pais = (select id_pais from pais
-                                                                                            where pais.pais = old.pais));
-        end if;
-        if not exists(select * from provincia where id_pais = (select id_pais from pais
-                                                                where pais.pais = old.pais)) then
-            DELETE FROM pais WHERE id_pais = (select id_pais from pais
-                                                                where pais.pais = old.pais);
-        end if;
-        return null;
+    BEGIN
+        -- Primero se borra la localidad
+        DELETE
+        FROM   localidad
+        WHERE  nombre = old.nombre
+        AND    id_departamento = (SELECT departamento.id_departamento
+                                  FROM   departamento
+                                  WHERE  departamento.departamento = old.departamento
+                                  AND    departamento.provincia = (SELECT provincia.provincia
+                                                                   FROM   provincia
+                                                                   WHERE  provincia.provincia = old.provincia
+                                                                   AND    provincia.id_pais = (SELECT id_pais
+                                                                                               FROM   pais
+                                                                                               WHERE  pais.pais = old.pais
+                                                                                              )
+                                                                  )
+                                 );
+        
+        -- Si el departamento no tiene ninguna localidad que dependa de este, se borra
+        IF NOT EXISTS (SELECT *
+                       FROM   localidad
+                       WHERE  id_departamento =(SELECT departamento.id_departamento
+                                                FROM   departamento
+                                                WHERE  departamento.departamento = old.departamento
+                                                AND    departamento.provincia = (SELECT provincia.provincia
+                                                                                 FROM   provincia
+                                                                                 WHERE  provincia.provincia = old.provincia
+                                                                                 AND    provincia.id_pais = (SELECT id_pais
+                                                                                                             FROM   pais
+                                                                                                             WHERE  pais.pais = old.pais
+                                                                                                            )
+                                                                                )
+                                               )
+                      )
+        THEN
+            DELETE
+            FROM   departamento
+            WHERE  id_departamento = (SELECT departamento.id_departamento
+                                      FROM   departamento
+                                      WHERE  departamento.departamento = old.departamento
+                                      AND    departamento.provincia = (SELECT provincia.provincia
+                                                                       FROM   provincia
+                                                                       WHERE  provincia.provincia = old.provincia
+                                                                       AND    provincia.id_pais = (SELECT id_pais
+                                                                                                   FROM   pais
+                                                                                                   WHERE  pais.pais = old.pais
+                                                                                                  )
+                                                                      )
+                                     );
+          
+        END IF;
+
+        -- Si la provincia no tiene ningun departamento que dependa de esta, se borra
+        IF NOT EXISTS (SELECT *
+                       FROM   departamento
+                       WHERE  provincia = (SELECT provincia.provincia
+                                           FROM   provincia
+                                           WHERE  provincia.provincia = old.provincia
+                                           AND    provincia.id_pais = (SELECT id_pais
+                                                                       FROM   pais
+                                                                       WHERE  pais.pais = old.pais
+                                                                      )
+                                          )
+                      )
+        THEN
+            DELETE
+            FROM   provincia
+            WHERE  provincia.provincia = (SELECT provincia.provincia
+                                          FROM   provincia
+                                          WHERE  provincia.provincia = old.provincia
+                                          AND    provincia.id_pais = (SELECT id_pais
+                                                                      FROM   pais
+                                                                      WHERE  pais.pais = old.pais
+                                                                     )
+                                         );
+        
+        END IF;
+
+        -- Si el pais no tiene ninguna provincia que dependa de este, se borra
+        IF NOT EXISTS (SELECT *
+                       FROM   provincia
+                       WHERE  id_pais = (SELECT id_pais
+                                         FROM   pais
+                                         WHERE  pais.pais = old.pais
+                                        )
+                      )
+        THEN
+            DELETE
+            FROM   pais
+            WHERE  id_pais = (SELECT id_pais
+                              FROM   pais
+                              WHERE  pais.pais = old.pais
+                             );
+        END IF;
+        return NULL;
     end
     $$
 LANGUAGE plpgsql;
 
-create trigger deleteEnOtrasTablas
-    after delete on intermedia
-    for each row
-    execute procedure doDeleteEnOtrasTablas();
+CREATE TRIGGER deleteenotrastablas
+    AFTER DELETE ON intermedia
+    FOR each row
+    EXECUTE PROCEDURE dodeleteenotrastablas(); 
